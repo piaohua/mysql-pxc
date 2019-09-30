@@ -1,0 +1,130 @@
+version: '3'
+
+services:
+ mysql-node-1:
+  image: percona/percona-xtradb-cluster:5.7
+  container_name: mysql-node-1
+  hostname: mysql-node-1
+  privileged: true
+  networks:
+   cluster-network:
+    ipv4_address: 172.18.0.2
+  expose:
+   - 3306
+  volumes:
+   - node1-data:/var/lib/mysql
+  environment:
+   - CLUSTER_NAME=mysql-cluster-test
+   - MYSQL_ROOT_PASSWORD=a123456
+   - XTRABACKUP_PASSWORD=a123456  
+   - MYSQL_DATABASE=appdb
+   - MYSQL_USER=RoyBatty
+   - MYSQL_PASSWORD=RoyBatty2019
+  
+ mysql-node-2:
+  image: percona/percona-xtradb-cluster:5.7
+  container_name: mysql-node-2
+  hostname: mysql-node-2
+  privileged: true
+  networks:
+   cluster-network:
+    ipv4_address: 172.18.0.3
+  expose:
+   - 3306
+  volumes:
+   - node2-data:/var/lib/mysql
+  environment:
+   - CLUSTER_NAME=mysql-cluster-test
+   - MYSQL_ROOT_PASSWORD=a123456
+   - XTRABACKUP_PASSWORD=a123456  
+   - CLUSTER_JOIN=mysql-node-1
+  depends_on:
+   - mysql-node-1
+
+ mysql-node-3:
+  image: percona/percona-xtradb-cluster:5.7
+  container_name: mysql-node-3
+  hostname: mysql-node-3
+  privileged: true
+  networks:
+   cluster-network:
+    ipv4_address: 172.18.0.4
+  expose:
+   - 3306
+  volumes:
+   - node3-data:/var/lib/mysql
+  environment:
+   - CLUSTER_NAME=mysql-cluster-test
+   - MYSQL_ROOT_PASSWORD=a123456
+   - XTRABACKUP_PASSWORD=a123456  
+   - CLUSTER_JOIN=mysql-node-1
+  depends_on:
+   - mysql-node-1
+   - mysql-node-2
+
+ mysql-shell:
+  image: neumayer/mysql-shell-batch
+  container_name: mysql-shell-batch-1
+  networks:
+   cluster-network:
+    ipv4_address: 172.18.0.20
+  volumes:
+   - ./scripts/:/scripts/
+  environment:
+   - MYSQL_USER=root
+   - MYSQL_HOST=mysql-node-1
+   - MYSQL_PORT=3306
+   - MYSQL_PASSWORD=a123456
+   - MYSQL_SCRIPT=/scripts/db.sql
+  depends_on:
+   - mysql-node-1
+   - mysql-node-2
+   - mysql-node-3
+
+ haproxy-keepalived1:
+  image: pelin/haproxy-keepalived
+  container_name: haproxy-keepalived-1
+  volumes:
+   - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+   - ./keepalived.cfg:/etc/keepalived/keepalived.conf
+  networks:
+   cluster-network:
+    ipv4_address: 172.18.0.7
+  ports:
+   - "4001:8888"
+   - "4002:3306"
+  depends_on:
+   - mysql-node-1
+   - mysql-node-2
+   - mysql-node-3
+
+ haproxy-keepalived2:
+  image: pelin/haproxy-keepalived
+  container_name: haproxy-keepalived-2
+  volumes:
+   - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+   - ./keepalived.cfg:/etc/keepalived/keepalived.conf
+  networks:
+   cluster-network:
+    ipv4_address: 172.18.0.8
+  ports:
+   - "4003:8888"
+   - "4004:3306"
+  depends_on:
+   - mysql-node-1
+   - mysql-node-2
+   - mysql-node-3
+   - haproxy-keepalived1
+
+volumes:
+    node1-data:
+    node2-data:
+    node3-data:
+
+networks:
+ cluster-network:
+  driver: bridge
+  ipam:
+    driver: default
+    config:
+    - subnet: 172.18.0.0/24
